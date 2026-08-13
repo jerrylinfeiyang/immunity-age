@@ -258,58 +258,108 @@
    例如部署到 GitHub Pages 后:
    const SHARE_URL = "https://你的用户名.github.io/immunity-age/";
    ============================================================ */
-const SHARE_URL = "https://jerrylinfeiyang.github.io/-immunity-age/";  // 已配置为你的正式网址
+const SHARE_URL = "https://jerrylinfeiyang.github.io/immunity-age/";  // 已配置为你的正式网址
 
 /* ===== 柔和氛围背景音(Web Audio,零文件零版权) ===== */
 const Music = (function(){
-  let ctx=null, master=null, timer=null, on=true, started=false;
-  // 五声音阶(C大调 pentatonic),听感柔和、不易出错音
-  const scale=[261.63,293.66,329.63,392.00,440.00,523.25,587.33];
+  let ctx=null, master=null, reverb=null, wet=null, dry=null, timer=null;
+  let on=true, started=false, step=0;
+
+  // C 大调五声,分低音铺底与主旋律两层
+  const F={C3:130.81,D3:146.83,E3:164.81,G3:196.00,A3:220.00,
+           C4:261.63,D4:293.66,E4:329.63,G4:392.00,A4:440.00,C5:523.25,D5:587.33,E5:659.25};
+  // 设计好的柔和旋律(而非随机),循环流动
+  const melody=[
+    {n:'E4',d:2},{n:'G4',d:2},{n:'A4',d:2},{n:'G4',d:2},
+    {n:'E4',d:2},{n:'D4',d:2},{n:'C4',d:3},{n:null,d:1},
+    {n:'G4',d:2},{n:'A4',d:2},{n:'C5',d:2},{n:'A4',d:2},
+    {n:'G4',d:2},{n:'E4',d:2},{n:'D4',d:3},{n:null,d:1},
+  ];
+  // 低音铺底(每 4 拍换一个,营造和声)
+  const bass=['C3','A3','G3','E3'];
+
+  function makeReverb(){
+    // 生成柔和的脉冲响应做空间混响
+    const len=ctx.sampleRate*2.6;
+    const buf=ctx.createBuffer(2,len,ctx.sampleRate);
+    for(let ch=0;ch<2;ch++){
+      const d=buf.getChannelData(ch);
+      for(let i=0;i<len;i++){
+        d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.4); // 指数衰减的柔和尾音
+      }
+    }
+    const cv=ctx.createConvolver();cv.buffer=buf;return cv;
+  }
+
   function ensure(){
     if(ctx) return;
     const AC=window.AudioContext||window.webkitAudioContext;
     ctx=new AC();
-    master=ctx.createGain();
-    master.gain.value=0.0;
+    master=ctx.createGain();master.gain.value=0.0;
+    // 干湿并联:一部分直达,一部分进混响
+    dry=ctx.createGain();dry.gain.value=0.7;
+    wet=ctx.createGain();wet.gain.value=0.5;
+    reverb=makeReverb();
+    dry.connect(master);
+    reverb.connect(wet);wet.connect(master);
     master.connect(ctx.destination);
   }
-  function note(freq,when,dur){
-    const o=ctx.createOscillator();
-    const g=ctx.createGain();
-    o.type="sine";
-    o.frequency.value=freq;
-    // 轻柔的渐入渐出包络
-    g.gain.setValueAtTime(0,when);
-    g.gain.linearRampToValueAtTime(0.12,when+0.6);
-    g.gain.linearRampToValueAtTime(0,when+dur);
-    o.connect(g);g.connect(master);
-    o.start(when);o.stop(when+dur+0.1);
+
+  // 温暖音色:基频 + 柔和泛音,经低通滤波去尖锐,慢起长收的包络
+  function pluck(freq,when,dur,vol){
+    const filt=ctx.createBiquadFilter();
+    filt.type="lowpass";filt.frequency.value=1600;filt.Q.value=0.3;
+    const env=ctx.createGain();
+    env.gain.setValueAtTime(0,when);
+    env.gain.linearRampToValueAtTime(vol,when+0.35);        // 慢起
+    env.gain.exponentialRampToValueAtTime(Math.max(0.0001,vol*0.5),when+dur*0.5);
+    env.gain.exponentialRampToValueAtTime(0.0001,when+dur);  // 长收
+    filt.connect(env);
+    env.connect(dry);env.connect(reverb);
+    // 三个泛音叠加,像被敲响的琴弦/音乐盒
+    const parts=[[1,1.0],[2,0.35],[3,0.14]];
+    parts.forEach(([mult,amp])=>{
+      const o=ctx.createOscillator();
+      o.type = mult===1?"triangle":"sine";
+      o.frequency.value=freq*mult;
+      const g=ctx.createGain();g.gain.value=amp;
+      o.connect(g);g.connect(filt);
+      o.start(when);o.stop(when+dur+0.1);
+    });
   }
+
+  const BEAT=0.62; // 每拍时长(秒),偏慢、放松
   function schedule(){
-    const now=ctx.currentTime;
-    // 每轮弹 2 个音,缓慢流动
-    const f1=scale[Math.floor(Math.random()*scale.length)];
-    const f2=scale[Math.floor(Math.random()*scale.length)];
-    note(f1, now+0.05, 2.6);
-    note(f2, now+1.6, 2.6);
+    const now=ctx.currentTime+0.06;
+    // 主旋律:取当前 4 个音符往后铺
+    let t=now, played=0;
+    while(played<4){
+      const m=melody[step%melody.length];
+      if(m.n) pluck(F[m.n], t, m.d*BEAT*1.1, 0.16);
+      t+=m.d*BEAT; played+=m.d; step++;
+    }
+    // 低音铺底:每次进来落一个低音,长音
+    const b=bass[Math.floor(step/4)%bass.length];
+    pluck(F[b], now, 4*BEAT*1.2, 0.10);
   }
+
   function fadeTo(v){ if(master){master.gain.cancelScheduledValues(ctx.currentTime);
-    master.gain.linearRampToValueAtTime(v,ctx.currentTime+0.8);} }
+    master.gain.linearRampToValueAtTime(v,ctx.currentTime+1.0);} }
+
   return {
-    // 首次由用户交互触发(绕开自动播放限制)
     start(){
       if(started) return;
       ensure();
       if(ctx.state==="suspended") ctx.resume();
       started=true;
       schedule();
-      timer=setInterval(schedule,3200);
-      fadeTo(on?0.18:0.0);
+      timer=setInterval(schedule, 4*BEAT*1000); // 每 4 拍续一段,无缝衔接
+      fadeTo(on?0.22:0.0);
     },
     toggle(){
       on=!on;
       if(!started && on) this.start();
-      else fadeTo(on?0.18:0.0);
+      else fadeTo(on?0.22:0.0);
       return on;
     },
     isOn(){return on;}
