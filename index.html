@@ -143,6 +143,38 @@
   .poster-close{flex:0 0 auto;background:transparent;color:var(--muted);border:1.5px solid var(--panel-line);
     border-radius:12px;padding:13px 22px;font-size:15px;font-weight:600}
 
+  /* 下一步行动模块 */
+  .nextstep{text-align:left;margin-top:22px;border:1px solid var(--panel-line);border-radius:16px;
+    background:linear-gradient(180deg,rgba(79,224,168,.06),rgba(79,224,168,.02));padding:20px}
+  .ns-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .ns-badge{font-size:11px;letter-spacing:.12em;background:var(--cell);color:#052018;
+    font-weight:700;padding:3px 10px;border-radius:99px}
+  .ns-head h3{font-size:16px;color:var(--ink);font-weight:650}
+  .ns-plan{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+  .ns-item{display:flex;align-items:flex-start;gap:12px;font-size:14.5px;color:#cfe3da;line-height:1.5}
+  .ns-item .num{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:rgba(79,224,168,.15);
+    color:var(--cell);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .ns-vaccine{display:flex;gap:12px;align-items:flex-start;background:rgba(240,197,97,.08);
+    border:1px solid rgba(240,197,97,.24);border-radius:12px;padding:14px 16px}
+  .ns-vac-icon{color:var(--gold);font-size:18px;flex:0 0 auto;margin-top:1px}
+  .ns-vaccine p{font-size:14px;color:#e4dcc7;line-height:1.55;margin-bottom:8px}
+  .ns-link{background:none;color:var(--gold);font-size:14px;font-weight:600;padding:0;text-align:left}
+  .ns-link:active{opacity:.7}
+
+  /* 30天复测 */
+  .retest{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:16px;
+    border:1px solid var(--panel-line);border-radius:14px;padding:16px 18px;background:var(--panel)}
+  .rt-title{font-size:15px;font-weight:650;color:var(--ink);margin-bottom:3px}
+  .rt-sub{font-size:13px;color:var(--muted);line-height:1.4}
+  .rt-btn{flex:0 0 auto;background:transparent;color:var(--cell);border:1.5px solid var(--cell);
+    border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600}
+  .rt-btn:active{transform:scale(.97)}
+  .rt-btn.done{color:var(--dim);border-color:var(--panel-line)}
+
+  /* 参与统计 */
+  .stat{margin-top:14px;text-align:center;font-size:13px;color:var(--dim);line-height:1.6}
+  .stat b{color:var(--cell);font-weight:650}
+
   #musicToggle{position:fixed;top:16px;right:16px;z-index:40;width:44px;height:44px;border-radius:50%;
     background:rgba(15,36,31,.7);border:1.5px solid var(--panel-line);backdrop-filter:blur(8px);
     color:var(--cell);font-size:18px;display:flex;align-items:center;justify-content:center;
@@ -224,6 +256,32 @@
       <h3>给你的优先建议</h3>
       <ul id="tips"></ul>
     </div>
+
+    <!-- 第一个洞:下一步行动 + 自然引导咨询医生(C端接B端) -->
+    <div class="nextstep" id="nextStep">
+      <div class="ns-head">
+        <span class="ns-badge">下一步</span>
+        <h3 id="nsTitle">把免疫力变年轻,从这几步开始</h3>
+      </div>
+      <div class="ns-plan" id="nsPlan"></div>
+      <div class="ns-vaccine" id="nsVaccine">
+        <div class="ns-vac-icon">◇</div>
+        <div>
+          <p id="nsVacText"></p>
+          <button class="ns-link" id="nsConsult">如何咨询专业医生 →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二个洞:30天复测 + 参与统计 -->
+    <div class="retest" id="retestCard">
+      <div class="rt-left">
+        <div class="rt-title">30 天后再测一次</div>
+        <div class="rt-sub" id="rtSub">坚持改善,看看你的免疫力年龄能年轻几岁。</div>
+      </div>
+      <button class="rt-btn" id="rtRemind">提醒我</button>
+    </div>
+    <div class="stat" id="statBar"></div>
 
     <div class="actions">
       <button class="btn-share" id="shareBtn">生成分享图</button>
@@ -548,7 +606,77 @@ function showResult(){
   const gcv=$("guardianCv"),gcx=gcv.getContext("2d");
   gcx.clearRect(0,0,gcv.width,gcv.height);
   drawGuardian(gcx, gcv.width/2, gcv.height/2+10, 0.78, mood, profile.sex, color);
+
+  // ===== 第一个洞:下一步行动清单(取最弱 3 项,给可执行动作) =====
+  const ACTION={
+    "睡眠":"今晚开始,固定起床时间,睡前 1 小时放下手机——先从早睡 30 分钟做起。",
+    "运动":"本周安排 3 次快走,每次 30 分钟;从'饭后散步'这种最容易坚持的开始。",
+    "饮食":"每餐加一份蔬菜、每天一份优质蛋白;把含糖饮料换成白开水或茶。",
+    "压力":"每天给自己 10 分钟'什么都不做'的时间:散步、深呼吸或晒太阳。",
+    "烟酒":"设一个'减量'小目标:今天起,烟或酒先减一半,再逐步往下。",
+    "基础健康":"把体检安排上;有慢性病的按医嘱管理,别让它拖累免疫基础。",
+  };
+  const planBox=$("nsPlan");planBox.innerHTML="";
+  const planItems=(weak.length?weak:[{c:"睡眠"},{c:"运动"},{c:"饮食"}]).slice(0,3);
+  planItems.forEach((w,i)=>{
+    const el=document.createElement("div");el.className="ns-item";
+    el.innerHTML=`<span class="num">${i+1}</span><span>${ACTION[w.c]}</span>`;
+    planBox.appendChild(el);
+  });
+
+  // 疫苗引导文案:按年龄/年龄差自然分层(不推荐具体产品,只引导咨询)
+  let vacText;
+  if(actual>=50 || realDelta>=6){
+    vacText="随着免疫力'变老',带状疱疹、流感、肺炎球菌等感染风险会上升。除了改善生活方式,针对成人的疫苗是这个年龄段重要的防护手段——是否适合你、该打哪些,建议咨询专业医生。";
+  }else{
+    vacText="免疫防护是一项长期功课。除了生活方式,进入 50 岁后,成人疫苗也会成为免疫防护的重要一环。可以提前了解,并在需要时咨询专业医生。";
+  }
+  $("nsVacText").textContent=vacText;
+
+  // ===== 第二个洞:参与统计(demo:浏览器本地累计) =====
+  recordStat(immuneAge, realDelta);
+  renderStat();
+
+  // 小卫士心情已在上方
   window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ===== 咨询引导(点开显示实用指引,不涉及具体推荐) ===== */
+$("nsConsult").onclick=()=>{
+  const box=$("nsVacText");
+  box.innerHTML='可以这样做:①到社区卫生服务中心或医院的<b>成人疫苗门诊/预防保健科</b>咨询;'+
+    '②告诉医生你的年龄和健康状况,请医生评估适合的疫苗;③把这份测试结果给医生看,帮助沟通。'+
+    '<br><span style="color:var(--dim);font-size:13px">具体接种方案请以医生的专业评估为准。</span>';
+  $("nsConsult").style.display="none";
+};
+
+/* ===== 30 天复测提醒(demo:本地标记 + 引导) ===== */
+$("rtRemind").onclick=()=>{
+  try{
+    const when=new Date(Date.now()+30*864e5);
+    localStorage.setItem("immunity_retest_at", when.toISOString());
+  }catch(e){}
+  $("rtRemind").textContent="已记下✓";
+  $("rtRemind").classList.add("done");
+  $("rtSub").textContent="30 天后欢迎回来复测。坚持改善,免疫力年龄真的会变化。";
+};
+
+/* ===== 参与统计:demo 阶段用浏览器本地存储累计 ===== */
+function recordStat(immuneAge, realDelta){
+  try{
+    const raw=localStorage.getItem("immunity_stats");
+    const s=raw?JSON.parse(raw):{count:0,sumDelta:0};
+    s.count+=1; s.sumDelta+=realDelta;
+    localStorage.setItem("immunity_stats", JSON.stringify(s));
+  }catch(e){}
+}
+function renderStat(){
+  let s={count:1,sumDelta:0};
+  try{const raw=localStorage.getItem("immunity_stats");if(raw)s=JSON.parse(raw);}catch(e){}
+  const avg=s.count?Math.round(s.sumDelta/s.count):0;
+  const avgTxt = avg>0?`平均比实际年龄大 <b>${avg}</b> 岁`:
+                 avg<0?`平均比实际年龄年轻 <b>${Math.abs(avg)}</b> 岁`:`平均与实际年龄持平`;
+  $("statBar").innerHTML=`已有 <b>${s.count}</b> 人完成自测 · 他们的免疫力年龄${avgTxt}`;
 }
 
 $("restart").onclick=()=>{
@@ -559,6 +687,9 @@ $("restart").onclick=()=>{
   $("bmiHint").textContent='我们会对比你的实际年龄,算出你的"免疫力年龄"。';
   $("startBtn").disabled=true;$("ageNum").textContent="0";$("bar").style.width="0";
   $("pcount").textContent="基础信息";$("pdim").textContent="Profile";
+  // 重置新模块
+  $("nsConsult").style.display="";
+  $("rtRemind").textContent="提醒我";$("rtRemind").classList.remove("done");
   window.scrollTo({top:0,behavior:"smooth"});
 };
 
