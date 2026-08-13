@@ -142,9 +142,24 @@
   .poster-btns{display:flex;gap:12px;margin-top:14px}
   .poster-close{flex:0 0 auto;background:transparent;color:var(--muted);border:1.5px solid var(--panel-line);
     border-radius:12px;padding:13px 22px;font-size:15px;font-weight:600}
+
+  #musicToggle{position:fixed;top:16px;right:16px;z-index:40;width:44px;height:44px;border-radius:50%;
+    background:rgba(15,36,31,.7);border:1.5px solid var(--panel-line);backdrop-filter:blur(8px);
+    color:var(--cell);font-size:18px;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 18px -6px rgba(0,0,0,.5);transition:transform .12s,border-color .15s,opacity .2s}
+  #musicToggle:active{transform:scale(.92)}
+  #musicToggle.off{color:var(--dim);border-color:rgba(140,220,190,.1)}
+  #musicToggle.off #musicIcon{opacity:.5;position:relative}
+  #musicToggle.off #musicIcon::after{content:"";position:absolute;left:-3px;top:50%;width:26px;height:1.5px;
+    background:var(--dim);transform:rotate(-45deg);transform-origin:center}
+  #musicToggle.pulse{animation:mpulse 2.4s ease-in-out infinite}
+  @keyframes mpulse{0%,100%{box-shadow:0 6px 18px -6px rgba(0,0,0,.5)}50%{box-shadow:0 0 16px 0 rgba(79,224,168,.4)}}
 </style>
 </head>
 <body>
+<button id="musicToggle" aria-label="背景音乐开关">
+  <span id="musicIcon">♪</span>
+</button>
 <div class="wrap">
   <div class="brandline">成人免疫健康自测</div>
   <h1>你的<span class="em">免疫力年龄</span>是多少岁?</h1>
@@ -245,6 +260,71 @@
    ============================================================ */
 const SHARE_URL = "https://jerrylinfeiyang.github.io/-immunity-age/";  // 已配置为你的正式网址
 
+/* ===== 柔和氛围背景音(Web Audio,零文件零版权) ===== */
+const Music = (function(){
+  let ctx=null, master=null, timer=null, on=true, started=false;
+  // 五声音阶(C大调 pentatonic),听感柔和、不易出错音
+  const scale=[261.63,293.66,329.63,392.00,440.00,523.25,587.33];
+  function ensure(){
+    if(ctx) return;
+    const AC=window.AudioContext||window.webkitAudioContext;
+    ctx=new AC();
+    master=ctx.createGain();
+    master.gain.value=0.0;
+    master.connect(ctx.destination);
+  }
+  function note(freq,when,dur){
+    const o=ctx.createOscillator();
+    const g=ctx.createGain();
+    o.type="sine";
+    o.frequency.value=freq;
+    // 轻柔的渐入渐出包络
+    g.gain.setValueAtTime(0,when);
+    g.gain.linearRampToValueAtTime(0.12,when+0.6);
+    g.gain.linearRampToValueAtTime(0,when+dur);
+    o.connect(g);g.connect(master);
+    o.start(when);o.stop(when+dur+0.1);
+  }
+  function schedule(){
+    const now=ctx.currentTime;
+    // 每轮弹 2 个音,缓慢流动
+    const f1=scale[Math.floor(Math.random()*scale.length)];
+    const f2=scale[Math.floor(Math.random()*scale.length)];
+    note(f1, now+0.05, 2.6);
+    note(f2, now+1.6, 2.6);
+  }
+  function fadeTo(v){ if(master){master.gain.cancelScheduledValues(ctx.currentTime);
+    master.gain.linearRampToValueAtTime(v,ctx.currentTime+0.8);} }
+  return {
+    // 首次由用户交互触发(绕开自动播放限制)
+    start(){
+      if(started) return;
+      ensure();
+      if(ctx.state==="suspended") ctx.resume();
+      started=true;
+      schedule();
+      timer=setInterval(schedule,3200);
+      fadeTo(on?0.18:0.0);
+    },
+    toggle(){
+      on=!on;
+      if(!started && on) this.start();
+      else fadeTo(on?0.18:0.0);
+      return on;
+    },
+    isOn(){return on;}
+  };
+})();
+
+const musicBtn=document.getElementById("musicToggle");
+const musicIcon=document.getElementById("musicIcon");
+musicBtn.classList.add("pulse"); // 首次提示可点
+musicBtn.addEventListener("click",()=>{
+  musicBtn.classList.remove("pulse");
+  const nowOn=Music.toggle();
+  musicBtn.classList.toggle("off",!nowOn);
+});
+
 (function(){for(let i=0;i<7;i++){const o=document.createElement("div");o.className="orb";
   const s=30+Math.random()*90;o.style.width=o.style.height=s+"px";
   o.style.left=Math.random()*100+"vw";o.style.top=Math.random()*100+"vh";
@@ -290,6 +370,7 @@ function checkProfile(){
 ["age","height","weight","sex"].forEach(id=>$(id).addEventListener("input",checkProfile));
 
 $("startBtn").onclick=()=>{
+  Music.start(); musicBtn.classList.remove("pulse");
   profile.age=parseFloat($("age").value);
   const h=parseFloat($("height").value),w=parseFloat($("weight").value);
   profile.bmi=w/Math.pow(h/100,2);profile.sex=$("sex").value;
